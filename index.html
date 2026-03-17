@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+<meta charset="UTF-8">
+<title>CineSearch Pro</title>
+
+<link rel="stylesheet" href="style.css">
+
+</head>
+
+<body>
+
+<!-- ===============================
+HEADER / SEARCH AREA
+=============================== -->
+
+<header class="header">
+
+<h1 class="logo">CineSearch<span>Pro</span></h1>
+
+<input
+    type="text"
+    id="searchInput"
+    placeholder="Search movies..."
+    autocomplete="off"
+/>
+
+</header>
+
+
+
+<!-- ===============================
+MAIN DASHBOARD
+=============================== -->
+
+<main class="dashboard">
+
+
+<!-- LEFT SIDE : SEARCH RESULTS -->
+
+<aside class="results-panel">
+
+<h2>Results</h2>
+
+<ul id="resultsList"></ul>
+
+<div id="loadingSpinner" class="spinner hidden"></div>
+</aside>
+
+
+
+<!-- RIGHT SIDE : MOVIE DETAILS -->
+
+<section id="movieDetails" class="movie-panel">
+
+<h2>Select a movie</h2>
+<p>Search for a movie to see details</p>
+
+</section>
+
+
+</main>
+
+
+
+<!-- ===============================
+RESULT TEMPLATE (REQUIRED)
+=============================== -->
+
+<template id="movieItemTemplate">
+
+<li class="movie-item">
+
+<span class="movie-name"></span>
+
+<div class="movie-meta">
+
+<span class="year"></span>
+
+<span class="rating"></span>
+
+</div>
+
+</li>
+
+</template>
+
+
+
+<script src="config.js"></script>
+<script src="class.js"></script>
+
+</body>
+</html>
