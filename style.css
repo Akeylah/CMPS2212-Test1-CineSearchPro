@@ -1,0 +1,302 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@500;700&display=swap');
+
+:root {
+  --bg-main: #05070d;
+  --bg-panel: rgba(10, 15, 30, 0.9);
+  --bg-glass: rgba(14, 22, 40, 0.78);
+  --line: rgba(0, 255, 255, 0.14);
+  --line-strong: rgba(255, 0, 128, 0.35);
+
+  --cyan: #00f6ff;
+  --cyan-soft: #5dfdff;
+  --pink: #ff2ea6;
+  --pink-soft: #ff66c4;
+  --yellow: #ffd24a;
+  --purple: #9d4dff;
+  --text-main: #e7faff;
+  --text-soft: #9fb6d9;
+  --text-dim: #6e83a5;
+
+  --shadow-cyan: 0 0 12px rgba(0, 246, 255, 0.25);
+  --shadow-pink: 0 0 18px rgba(255, 46, 166, 0.22);
+  --shadow-deep: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  font-family: 'Rajdhani', sans-serif;
+  color: var(--text-main);
+  background:
+    radial-gradient(circle at 15% 20%, rgba(0, 246, 255, 0.08), transparent 30%),
+    radial-gradient(circle at 80% 25%, rgba(157, 77, 255, 0.08), transparent 28%),
+    radial-gradient(circle at 60% 80%, rgba(255, 46, 166, 0.06), transparent 30%),
+    linear-gradient(180deg, #05070d 0%, #02040a 100%);
+  overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.02) 0px,
+      rgba(255, 255, 255, 0.02) 1px,
+      transparent 2px,
+      transparent 4px
+    );
+  opacity: 0.22;
+  z-index: 0;
+}
+
+/* ==========================================
+   HEADER
+========================================== */
+
+.header {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 60px;
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+
+  border-bottom: 1px solid rgba(0, 246, 255, 0.08);
+  background:
+    linear-gradient(90deg, rgba(6, 10, 20, 0.96), rgba(5, 7, 13, 0.92)),
+    rgba(5, 7, 13, 0.95);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.logo {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.9rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--yellow);
+  text-shadow: 0 0 10px rgba(255, 210, 74, 0.2);
+  flex-shrink: 0;
+}
+
+.logo span {
+  color: var(--cyan);
+  font-size: 1rem;
+  margin-left: 6px;
+  vertical-align: middle;
+  text-shadow: 0 0 12px rgba(0, 246, 255, 0.3);
+}
+
+#searchInput {
+  margin-left: auto;
+  width: min(540px, 42vw);
+  height: 42px;
+  border: 1px solid rgba(0, 246, 255, 0.18);
+  background: rgba(8, 14, 28, 0.8);
+  color: var(--text-main);
+  border-radius: 4px;
+  padding: 0 14px;
+  font-size: 1rem;
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 46, 166, 0.05), var(--shadow-deep);
+  transition: 0.25s ease;
+}
+
+#searchInput::placeholder {
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+
+#searchInput:focus {
+  border-color: rgba(0, 246, 255, 0.45);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 46, 166, 0.12),
+    0 0 0 2px rgba(0, 246, 255, 0.08),
+    0 0 18px rgba(0, 246, 255, 0.15);
+}
+
+/* ==========================================
+   DASHBOARD LAYOUT
+========================================== */
+
+.dashboard {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 230px 1fr;
+  min-height: calc(100vh - 60px);
+}
+
+/* ==========================================
+   LEFT PANEL MOVIE CARDS (BIGGER + POSTER)
+========================================== */
+
+#resultsList {
+  list-style: none;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: calc(100vh - 105px);
+  overflow-y: auto;
+}
+
+.movie-item {
+  margin: 0;
+  width: 100%;
+  min-height: 92px;
+  padding: 10px;
+  border: 1px solid rgba(0, 246, 255, 0.08);
+  border-radius: 10px;
+  background:
+    linear-gradient(90deg, rgba(10, 18, 34, 0.88), rgba(8, 13, 25, 0.82));
+  cursor: pointer;
+  transition: 0.25s ease;
+  position: relative;
+  overflow: hidden;
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.movie-item::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: linear-gradient(180deg, var(--pink), var(--cyan));
+  opacity: 0;
+  transition: 0.25s ease;
+}
+
+.movie-item:hover {
+  transform: translateX(4px);
+  border-color: rgba(0, 246, 255, 0.2);
+  box-shadow: var(--shadow-cyan);
+}
+
+.movie-item:hover::before,
+.movie-item.active::before,
+.movie-item.selected::before {
+  opacity: 1;
+}
+
+.movie-item.active,
+.movie-item.selected {
+  border-color: rgba(255, 46, 166, 0.28);
+  background:
+    linear-gradient(90deg, rgba(18, 14, 34, 0.95), rgba(9, 14, 28, 0.9));
+  box-shadow: var(--shadow-pink);
+}
+
+.movie-thumb {
+  width: 52px;
+  min-width: 52px;
+  height: 72px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 246, 255, 0.14);
+  background: rgba(14, 22, 40, 0.9);
+  flex-shrink: 0;
+}
+
+.movie-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.movie-thumb-fallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 4px;
+}
+
+.movie-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.movie-name {
+  display: block;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 6px;
+  letter-spacing: 0.2px;
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.movie-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+}
+
+.year {
+  color: var(--text-soft);
+  flex-shrink: 0;
+}
+
+.rating {
+  color: var(--yellow);
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(255, 210, 74, 0.15);
+  flex-shrink: 0;
+}
+/* ==========================================
+   RIGHT MOVIE PANEL
+========================================== */
+
+.movie-panel {
+  padding: 18px 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background:
+    radial-gradient(circle at 65% 15%, rgba(0, 246, 255, 0.04), transparent 22%),
+    radial-gradient(circle at 30% 80%, rgba(255, 46, 166, 0.04), transparent 20%);
+  overflow-y: auto;
+}
+
+.movie-panel h2 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 2rem;
+  color: var(--cyan-soft);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.movie-panel > p {
+  color: var(--text-soft);
+  font-size: 1.05rem;
+}
