@@ -1,94 +1,102 @@
-class SearchComponent {
-constructor() {
-this.searchInput = document.getElementById("searchInput");
-this.resultsList = document.getElementById("resultsList");
-this.template = document.getElementById("movieItemTemplate");
-this.detailsPanel = document.getElementById("movieDetails");
-this.spinner = document.getElementById("loadingSpinner");
+// =====================================
+// DOM ELEMENTS
+// =====================================
+const searchInput = document.getElementById("searchInput");
+const resultsList = document.getElementById("resultsList");
+const template = document.getElementById("movieItemTemplate");
+const detailsPanel = document.getElementById("movieDetails");
+const spinner = document.getElementById("loadingSpinner");
+const searchStatus = document.getElementById("searchStatus");
+// =====================================
+// STATE
+// =====================================
+const cache = new Map();
+let debounceTimer = null;
+let abortController = null;
+let selectedIndex = -1;
 
-this.cache = new Map();
-this.debounceTimer = null;
-this.abortController = null;
-this.selectedIndex = -1;
-
-if (!this.searchInput || !this.resultsList || !this.template || !this.detailsPanel) {
+// =====================================
+// INIT CHECK
+// =====================================
+if (!searchInput || !resultsList || !template || !detailsPanel) {
 console.error("Missing required DOM elements.");
-return;
-}
-
-
-this.searchInput.addEventListener("input", (e) => {
-this.handleInput(e.target.value);
+} else {
+searchInput.addEventListener("input", (e) => {
+handleInput(e.target.value);
 });
 
-this.searchInput.addEventListener("keydown", (e) => {
-this.handleKeyboard(e);
+searchInput.addEventListener("keydown", (e) => {
+handleKeyboard(e);
 });
 }
 
 // =====================================
 // LOADING SPINNER
 // =====================================
-
-showLoading() {
-if (this.spinner) {
-this.spinner.classList.remove("hidden");
+function showLoading() {
+if (spinner) {
+spinner.classList.remove("hidden");
 }
 }
 
-hideLoading() {
-if (this.spinner) {
-this.spinner.classList.add("hidden");
+function hideLoading() {
+if (spinner) {
+spinner.classList.add("hidden");
 }
 }
 
+// =====================================
+// PROMISE STATUS
+// =====================================
+function updatePromiseStatus(resolved, total) {
+  if (!searchStatus) return;
+
+  searchStatus.textContent = `Promise.allSettled · ${resolved}/${total} resolved`;
+}
 // =====================================
 // HANDLE INPUT WITH DEBOUNCE
 // =====================================
+function handleInput(query) {
+clearTimeout(debounceTimer);
 
-handleInput(query) {
-clearTimeout(this.debounceTimer);
-
-this.debounceTimer = setTimeout(() => {
+debounceTimer = setTimeout(() => {
 if (query.trim().length === 0) {
-this.clearResults();
-this.detailsPanel.innerHTML = `
+clearResults();
+detailsPanel.innerHTML = `
 <h2>Movie Details</h2>
 <p>Select a movie to view details.</p>
 `;
 return;
 }
 
-this.searchMovies(query.trim());
+searchMovies(query.trim());
 }, 300);
 }
-
 
 // =====================================
 // SEARCH MOVIES
 // =====================================
-
-async searchMovies(query) {
-if (this.cache.has(query)) {
+async function searchMovies(query) {
+if (cache.has(query)) {
 console.log("Loaded from cache");
-this.hideLoading();
-this.renderResults(this.cache.get(query), query);
+hideLoading();
+renderResults(cache.get(query), query);
 return;
 }
 
 try {
-this.showLoading();
+showLoading();
 
-if (this.abortController) {
-this.abortController.abort();
+if (abortController) {
+abortController.abort();
 }
 
-this.abortController = new AbortController();
+abortController = new AbortController();
 
 const url = `${SEARCH_URL}?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}`;
 
 const response = await fetch(url, {
-signal: this.abortController.signal,
+signal: abortController.signal,
 });
 
 if (!response.ok) {
@@ -98,26 +106,77 @@ throw new Error(`Search request failed: ${response.status}`);
 const data = await response.json();
 const results = data.results || [];
 
-this.cache.set(query, results);
+cache.set(query, results);
 
-this.renderResults(results, query);
+renderResults(results, query);
 } catch (error) {
 if (error.name === "AbortError") {
 console.log("Request cancelled");
 } else {
 console.error("Search error:", error);
-this.resultsList.innerHTML = `<li class="movie-item">Unable to load search results.</li>`;
+resultsList.innerHTML = `<li class="movie-item">Unable to load search results.</li>`;
 }
 } finally {
-this.hideLoading();
+hideLoading();
+}
+}
+
+// =====================================
+// KEYBOARD NAVIGATION
+// =====================================
+function handleKeyboard(event) {
+const items = resultsList.querySelectorAll(".movie-item");
+
+if (items.length === 0) return;
+
+if (event.key === "ArrowDown") {
+event.preventDefault();
+
+selectedIndex++;
+
+if (selectedIndex >= items.length) {
+selectedIndex = 0;
+}
+
+updateSelection(items);
+}
+
+if (event.key === "ArrowUp") {
+event.preventDefault();
+
+selectedIndex--;
+
+if (selectedIndex < 0) {
+selectedIndex = items.length - 1;
+}
+
+updateSelection(items);
+}
+
+if (event.key === "Enter") {
+if (selectedIndex >= 0) {
+event.preventDefault();
+items[selectedIndex].click();
+}
+}
+}
+
+function updateSelection(items) {
+items.forEach((item) => item.classList.remove("selected"));
+
+if (selectedIndex >= 0) {
+items[selectedIndex].classList.add("selected");
+
+items[selectedIndex].scrollIntoView({
+block: "nearest",
+});
 }
 }
 
 // =====================================
 // HIGHLIGHT SEARCH TEXT
 // =====================================
-
-highlightText(text, query) {
+function highlightText(text, query) {
 const fragment = document.createDocumentFragment();
 
 const lowerText = text.toLowerCase();
@@ -127,7 +186,6 @@ let start = 0;
 let index;
 
 while ((index = lowerText.indexOf(lowerQuery, start)) !== -1) {
-// normal text
 fragment.appendChild(
 document.createTextNode(text.slice(start, index))
 );
@@ -151,20 +209,19 @@ return fragment;
 // =====================================
 // RENDER SEARCH RESULTS
 // =====================================
-
-renderResults(results, query) {
-this.selectedIndex = -1;
-this.resultsList.innerHTML = "";
+function renderResults(results, query) {
+selectedIndex = -1;
+resultsList.innerHTML = "";
 
 if (!results.length) {
-this.resultsList.innerHTML = `<li class="movie-item">No movies found.</li>`;
+resultsList.innerHTML = `<li class="movie-item">No movies found.</li>`;
 return;
 }
 
 const fragment = document.createDocumentFragment();
 
 results.forEach((movie) => {
-const clone = this.template.content.cloneNode(true);
+const clone = template.content.cloneNode(true);
 
 const item = clone.querySelector(".movie-item");
 const thumbImg = clone.querySelector(".movie-thumb-img");
@@ -178,7 +235,7 @@ const thumbURL = movie.poster_path
 : null;
 
 title.textContent = "";
-title.appendChild(this.highlightText(movie.title || "Untitled", query));
+title.appendChild(highlightText(movie.title || "Untitled", query));
 
 year.textContent = movie.release_date
 ? movie.release_date.slice(0, 4)
@@ -207,74 +264,85 @@ thumbFallback.classList.remove("hidden");
 }
 
 item.addEventListener("click", () => {
-this.resultsList.querySelectorAll(".movie-item").forEach((el) => {
+resultsList.querySelectorAll(".movie-item").forEach((el) => {
 el.classList.remove("active");
 });
 
 item.classList.add("active");
-this.loadMovieDetails(movie.id);
+loadMovieDetails(movie.id);
 });
 
 fragment.appendChild(clone);
 });
 
-this.resultsList.appendChild(fragment);
+resultsList.appendChild(fragment);
 }
 
 // =====================================
 // CLEAR RESULTS
 // =====================================
-
-clearResults() {
-this.resultsList.innerHTML = "";
-this.selectedIndex = -1;
+function clearResults() {
+resultsList.innerHTML = "";
+selectedIndex = -1;
 }
 
 // =====================================
 // LOAD MOVIE DETAILS
 // =====================================
+async function loadMovieDetails(id) {
+  const detailsURL = `${MOVIE_DETAILS_URL}/${id}?api_key=${TMDB_API_KEY}`;
+  const creditsURL = `${MOVIE_DETAILS_URL}/${id}/credits?api_key=${TMDB_API_KEY}`;
+  const videosURL = `${MOVIE_DETAILS_URL}/${id}/videos?api_key=${TMDB_API_KEY}`;
 
-async loadMovieDetails(id) {
-const detailsURL = `${MOVIE_DETAILS_URL}/${id}?api_key=${TMDB_API_KEY}`;
-const creditsURL = `${MOVIE_DETAILS_URL}/${id}/credits?api_key=${TMDB_API_KEY}`;
-const videosURL = `${MOVIE_DETAILS_URL}/${id}/videos?api_key=${TMDB_API_KEY}`;
+  try {
+    showLoading();
 
-try {
-this.showLoading();
+    // show pending state BEFORE Promise.allSettled runs
+    updatePromiseStatus(0, 3);
 
-const results = await Promise.allSettled([
-fetch(detailsURL).then((r) => {
-if (!r.ok) throw new Error("Details request failed");
-return r.json();
-}),
-fetch(creditsURL).then((r) => {
-if (!r.ok) throw new Error("Credits request failed");
-return r.json();
-}),
-fetch(videosURL).then((r) => {
-if (!r.ok) throw new Error("Videos request failed");
-return r.json();
-}),
-]);
+    const results = await Promise.allSettled([
+      fetch(detailsURL).then((r) => {
+        if (!r.ok) throw new Error("Details request failed");
+        return r.json();
+      }),
+      fetch(creditsURL).then((r) => {
+        if (!r.ok) throw new Error("Credits request failed");
+        return r.json();
+      }),
+      fetch(videosURL).then((r) => {
+        if (!r.ok) throw new Error("Videos request failed");
+        return r.json();
+      }),
+    ]);
 
-const details = results[0].status === "fulfilled" ? results[0].value : null;
-const credits = results[1].status === "fulfilled" ? results[1].value : null;
-const videos = results[2].status === "fulfilled" ? results[2].value : null;
+    // count how many resolved successfully
+    const resolvedCount = results.filter(
+      (result) => result.status === "fulfilled"
+    ).length;
 
-this.renderMovieDetails(details, credits, videos);
-} catch (error) {
-console.error("Details error:", error);
-this.detailsPanel.innerHTML = `<p>Unable to load movie details.</p>`;
-} finally {
-this.hideLoading();
-}
+    // update AFTER Promise.allSettled finishes
+    updatePromiseStatus(resolvedCount, results.length);
+
+    const details = results[0].status === "fulfilled" ? results[0].value : null;
+    const credits = results[1].status === "fulfilled" ? results[1].value : null;
+    const videos = results[2].status === "fulfilled" ? results[2].value : null;
+
+    renderMovieDetails(details, credits, videos);
+  } catch (error) {
+    console.error("Details error:", error);
+    detailsPanel.innerHTML = `<p>Unable to load movie details.</p>`;
+
+    // if something unexpected happens outside allSettled
+    updatePromiseStatus(0, 3);
+  } finally {
+    hideLoading();
+  }
 }
 
 // =====================================
 // GET TRAILER
 // =====================================
-
-getTrailer(videos) {
+function getTrailer(videos) {
 if (!videos || !videos.results) return null;
 
 const trailer = videos.results.find(
@@ -289,10 +357,9 @@ return trailer ? `https://www.youtube.com/watch?v=${trailer.key}` : null;
 // =====================================
 // RENDER MOVIE DETAILS
 // =====================================
-
-renderMovieDetails(details, credits, videos) {
+function renderMovieDetails(details, credits, videos) {
 if (!details) {
-this.detailsPanel.textContent = "Unable to load movie.";
+detailsPanel.textContent = "Unable to load movie.";
 return;
 }
 
@@ -318,9 +385,9 @@ const castHTML = credits && credits.cast && credits.cast.length
 `).join("")
 : `<p>No cast data available.</p>`;
 
-const trailer = this.getTrailer(videos);
+const trailer = getTrailer(videos);
 
-this.detailsPanel.innerHTML = `
+detailsPanel.innerHTML = `
 <div class="movie-hero">
 <img class="movie-backdrop" src="${backdrop}" alt="${details.title} backdrop">
 <div class="movie-hero-overlay"></div>
@@ -368,8 +435,3 @@ trailer
 </div>
 `;
 }
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-new SearchComponent();
-});
