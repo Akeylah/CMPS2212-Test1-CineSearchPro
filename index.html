@@ -1,81 +1,51 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>CMPS2212-Test1</title>
-<link rel="stylesheet" href="style.css">
-
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cine-Search Pro</title>
+<link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
+<div class="app-shell">
 <header class="header">
 <h1 class="logo">Cine-Search<span>Pro</span></h1>
-<input type="text" id="searchInput"placeholder= "Search Movie..."  autocomplete="off"/>
-<div class="search-status" id="searchStatus"> Promise.allSettled · 0/0 resolved  </div>
+<input type="text" id="searchInput" placeholder="Search Movie..." autocomplete="off" />
+<div class="search-status" id="searchStatus">
+Promise.allSettled · 0/0 resolved
+</div>
 </header>
 
 <main class="dashboard">
+<section class="results-panel" id="resultsPanel" data-loading="false">
+<div class="loading-spinner hidden" id="loadingSpinner"></div>
 
-<aside class="results-panel">
-<h2>Results</h2>
 <ul id="resultsList"></ul>
-<div id="loadingSpinner" class="spinner hidden"></div>
-</aside>
+</section>
 
-
-<section id="movieDetails" class="movie-panel">
+<section class="movie-panel details-panel" id="movieDetails">
 <div class="detail-empty" id="detail-empty">
 <div class="detail-empty-icon"></div>
-<p>SEARCH A FILM TO SEE DETAILS</p>
-</div>
-
-
-<div class="detail-content" id="detail-content">
-<div id="detail-backdrop-wrap">
-<img class="detail-backdrop" id="detail-backdrop">
-</div>
-<div class="detail-backdrop-overlay">
-<div class="detail-poster-row">
-<img class="detail-poster" id="detail-poster">
-<div class="detail-title-block">
-<div class="detail-title" id="detail-title"></div>
-<div class="detail-tagline" id="detail-tagline"></div>
-<div class="detail-badges" id="detail-badges"></div>
-</div>
-</div>
-</div>
-
-
-<div class="detail-grid">
-<div class="detail-section full">
-<div class="section-label">Overview</div>
-<p class="overview-text" id="detail-overview"></p>
-</div>
-<div class="detail-section">
-<div class="section-label">Cast</div>
-<div class="cast-grid" id="detail-cast"></div>
-</div>
-<div class="detail-section">
-<div class="section-label">Trailer</div>
-<div id="detail-trailer"></div>
-</div>
-</div>
+<p>SEARCH A FILM TO INSPECT</p>
 </div>
 </section>
 </main>
-
-<template id="movieItemTemplate">
-<li class="movie-item">
-<div class="movie-thumb">
-<img class="movie-thumb-img" src="" alt="Movie poster">
-<div class="movie-thumb-fallback hidden">No Image</div>
 </div>
 
-<div class="movie-info">
-<span class="movie-name"></span>
+<template id="movieItemTemplate">
+<li class="movie-item" tabindex="0">
+<div class="movie-thumb">
+<img class="movie-thumb-img hidden" alt="Movie poster" />
+<div class="movie-thumb-fallback">🎬</div>
+</div>
+
 <div class="movie-meta">
-<span class="year"></span>
-<span class="rating"></span>
+<h3 class="movie-name"></h3>
+
+<div class="movie-submeta">
+<span class="year">N/A</span>
+<span class="rating">⭐ N/A</span>
 </div>
 </div>
 </li>

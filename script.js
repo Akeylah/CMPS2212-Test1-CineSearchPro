@@ -1,102 +1,143 @@
-// =====================================
-// DOM ELEMENTS
-// =====================================
-const searchInput = document.getElementById("searchInput");
-const resultsList = document.getElementById("resultsList");
-const template = document.getElementById("movieItemTemplate");
-const detailsPanel = document.getElementById("movieDetails");
-const spinner = document.getElementById("loadingSpinner");
-const searchStatus = document.getElementById("searchStatus");
-// =====================================
-// STATE
-// =====================================
-const cache = new Map();
-let debounceTimer = null;
-let abortController = null;
-let selectedIndex = -1;
+const SearchComponent = {
+searchInput: null,
+resultsList: null,
+template: null,
+detailsPanel: null,
+spinner: null,
+searchStatus: null,
+detailEmpty: null,
 
-// =====================================
-// INIT CHECK
-// =====================================
-if (!searchInput || !resultsList || !template || !detailsPanel) {
+cache: new Map(),
+abortController: null,
+detailsAbortController: null,
+selectedIndex: -1,
+currentResults: [],
+lastQuery: "",
+
+init() {
+this.searchInput = document.getElementById("searchInput");
+this.resultsList = document.getElementById("resultsList");
+this.template = document.getElementById("movieItemTemplate");
+this.detailsPanel = document.getElementById("movieDetails");
+this.spinner = document.getElementById("loadingSpinner");
+this.searchStatus = document.getElementById("searchStatus");
+this.detailEmpty = document.getElementById("detail-empty");
+
+if (!this.searchInput || !this.resultsList || !this.template || !this.detailsPanel) {
 console.error("Missing required DOM elements.");
-} else {
-searchInput.addEventListener("input", (e) => {
-handleInput(e.target.value);
-});
-
-searchInput.addEventListener("keydown", (e) => {
-handleKeyboard(e);
-});
-}
-
-// =====================================
-// LOADING SPINNER
-// =====================================
-function showLoading() {
-if (spinner) {
-spinner.classList.remove("hidden");
-}
-}
-
-function hideLoading() {
-if (spinner) {
-spinner.classList.add("hidden");
-}
-}
-
-// =====================================
-// PROMISE STATUS
-// =====================================
-function updatePromiseStatus(resolved, total) {
-  if (!searchStatus) return;
-
-  searchStatus.textContent = `Promise.allSettled · ${resolved}/${total} resolved`;
-}
-// =====================================
-// HANDLE INPUT WITH DEBOUNCE
-// =====================================
-function handleInput(query) {
-clearTimeout(debounceTimer);
-
-debounceTimer = setTimeout(() => {
-if (query.trim().length === 0) {
-clearResults();
-detailsPanel.innerHTML = `
-<h2>Movie Details</h2>
-<p>Select a movie to view details.</p>
-`;
 return;
 }
 
-searchMovies(query.trim());
-}, 300);
+this.bindEvents();
+this.setSearchStatus("Ready");
+},
+
+bindEvents() {
+this.searchInput.addEventListener(
+"input",
+this.debounce((e) => {
+this.handleInput(e.target.value);
+}, 300)
+);
+
+this.searchInput.addEventListener("keydown", (e) => {
+if (["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(e.key)) {
+e.preventDefault();
 }
 
-// =====================================
-// SEARCH MOVIES
-// =====================================
-async function searchMovies(query) {
-if (cache.has(query)) {
-console.log("Loaded from cache");
-hideLoading();
-renderResults(cache.get(query), query);
+this.handleKeyboard(e);
+});
+},
+
+debounce(fn, delay = 300) {
+let timer = null;
+return (...args) => {
+clearTimeout(timer);
+timer = setTimeout(() => {
+fn(...args);
+}, delay);
+};
+},
+
+showLoading() {
+if (this.spinner) {
+this.spinner.classList.remove("hidden");
+}
+
+if (this.searchInput) {
+this.searchInput.setAttribute("data-loading", "true");
+this.searchInput.setAttribute("aria-busy", "true");
+}
+},
+
+hideLoading() {
+if (this.spinner) {
+this.spinner.classList.add("hidden");
+}
+
+if (this.searchInput) {
+this.searchInput.setAttribute("data-loading", "false");
+this.searchInput.setAttribute("aria-busy", "false");
+}
+},
+
+setSearchStatus(message) {
+if (!this.searchStatus) return;
+this.searchStatus.textContent = message;
+},
+
+updatePromiseStatus(resolved, total) {
+if (!this.searchStatus) return;
+this.searchStatus.textContent = `Promise.allSettled · ${resolved}/${total} resolved`;
+},
+
+handleInput(query) {
+const trimmed = query.trim();
+this.lastQuery = trimmed;
+
+if (trimmed.length === 0) {
+this.abortActiveSearch();
+this.clearResults();
+this.resetDetailsPanel();
+this.setSearchStatus("Ready");
+return;
+}
+
+this.searchMovies(trimmed);
+},
+
+abortActiveSearch() {
+if (this.abortController) {
+this.abortController.abort();
+}
+},
+
+abortActiveDetailsRequest() {
+if (this.detailsAbortController) {
+this.detailsAbortController.abort();
+}
+},
+
+async searchMovies(query) {
+if (this.cache.has(query)) {
+const cachedResults = this.cache.get(query);
+this.currentResults = cachedResults;
+this.renderResults(cachedResults, query);
+this.setSearchStatus(`Cache hit · ${cachedResults.length} result${cachedResults.length === 1 ? "" : "s"}`);
 return;
 }
 
 try {
-showLoading();
+this.showLoading();
+this.setSearchStatus("Searching...");
 
-if (abortController) {
-abortController.abort();
-}
-
-abortController = new AbortController();
+this.abortActiveSearch();
+this.abortController = new AbortController();
 
 const url = `${SEARCH_URL}?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}`;
 
 const response = await fetch(url, {
-signal: abortController.signal,
+signal: this.abortController.signal,
 });
 
 if (!response.ok) {
@@ -104,124 +145,160 @@ throw new Error(`Search request failed: ${response.status}`);
 }
 
 const data = await response.json();
-const results = data.results || [];
+const results = Array.isArray(data.results) ? data.results : [];
 
-cache.set(query, results);
+this.cache.set(query, results);
+this.currentResults = results;
 
-renderResults(results, query);
+if (this.lastQuery !== query) {
+return;
+}
+
+this.renderResults(results, query);
+this.setSearchStatus(`Loaded · ${results.length} result${results.length === 1 ? "" : "s"}`);
 } catch (error) {
 if (error.name === "AbortError") {
-console.log("Request cancelled");
-} else {
+console.log("Search request cancelled");
+return;
+}
+
 console.error("Search error:", error);
-resultsList.innerHTML = `<li class="movie-item">Unable to load search results.</li>`;
-}
+this.resultsList.innerHTML = `<li class="movie-item">Unable to load search results.</li>`;
+this.setSearchStatus("Search failed");
 } finally {
-hideLoading();
+this.hideLoading();
 }
-}
+},
 
-// =====================================
-// KEYBOARD NAVIGATION
-// =====================================
-function handleKeyboard(event) {
-const items = resultsList.querySelectorAll(".movie-item");
-
+handleKeyboard(event) {
+const items = this.resultsList.querySelectorAll(".movie-item[data-result-item='true']");
 if (items.length === 0) return;
 
 if (event.key === "ArrowDown") {
 event.preventDefault();
 
-selectedIndex++;
-
-if (selectedIndex >= items.length) {
-selectedIndex = 0;
+if (this.selectedIndex < 0) {
+this.selectedIndex = 0;
+} else {
+this.selectedIndex++;
+if (this.selectedIndex >= items.length) {
+this.selectedIndex = 0;
+}
 }
 
-updateSelection(items);
+this.updateSelection(items);
+return;
 }
 
 if (event.key === "ArrowUp") {
 event.preventDefault();
 
-selectedIndex--;
-
-if (selectedIndex < 0) {
-selectedIndex = items.length - 1;
+if (this.selectedIndex < 0) {
+this.selectedIndex = items.length - 1;
+} else {
+this.selectedIndex--;
+if (this.selectedIndex < 0) {
+this.selectedIndex = items.length - 1;
+}
 }
 
-updateSelection(items);
+this.updateSelection(items);
+return;
 }
 
 if (event.key === "Enter") {
-if (selectedIndex >= 0) {
+if (this.selectedIndex >= 0 && items[this.selectedIndex]) {
 event.preventDefault();
-items[selectedIndex].click();
+items[this.selectedIndex].click();
 }
-}
+return;
 }
 
-function updateSelection(items) {
-items.forEach((item) => item.classList.remove("selected"));
+if (event.key === "Escape") {
+event.preventDefault();
+this.clearSelection(items);
+this.searchInput.focus();
+}
+},
 
-if (selectedIndex >= 0) {
-items[selectedIndex].classList.add("selected");
+updateSelection(items) {
+items.forEach((item) => {
+item.classList.remove("selected");
+item.setAttribute("aria-selected", "false");
+item.setAttribute("tabindex", "-1");
+});
 
-items[selectedIndex].scrollIntoView({
+if (this.selectedIndex >= 0 && items[this.selectedIndex]) {
+const activeItem = items[this.selectedIndex];
+activeItem.classList.add("selected");
+activeItem.setAttribute("aria-selected", "true");
+activeItem.setAttribute("tabindex", "0");
+
+activeItem.scrollIntoView({
 block: "nearest",
 });
 }
-}
+},
 
-// =====================================
-// HIGHLIGHT SEARCH TEXT
-// =====================================
-function highlightText(text, query) {
+clearSelection(items) {
+this.selectedIndex = -1;
+
+items.forEach((item) => {
+item.classList.remove("selected");
+item.setAttribute("aria-selected", "false");
+item.setAttribute("tabindex", "-1");
+});
+},
+
+createTextNodeSafe(value, fallback = "") {
+return document.createTextNode(value || fallback);
+},
+
+highlightText(text, query) {
 const fragment = document.createDocumentFragment();
 
-const lowerText = text.toLowerCase();
-const lowerQuery = query.toLowerCase();
+const safeText = String(text || "Untitled");
+const safeQuery = String(query || "").trim();
+
+if (!safeQuery) {
+fragment.appendChild(document.createTextNode(safeText));
+return fragment;
+}
+
+const lowerText = safeText.toLowerCase();
+const lowerQuery = safeQuery.toLowerCase();
 
 let start = 0;
 let index;
 
 while ((index = lowerText.indexOf(lowerQuery, start)) !== -1) {
-fragment.appendChild(
-document.createTextNode(text.slice(start, index))
-);
+fragment.appendChild(document.createTextNode(safeText.slice(start, index)));
 
 const mark = document.createElement("span");
 mark.className = "highlight";
-mark.textContent = text.slice(index, index + query.length);
+mark.textContent = safeText.slice(index, index + safeQuery.length);
 
 fragment.appendChild(mark);
-
-start = index + query.length;
+start = index + safeQuery.length;
 }
 
-fragment.appendChild(
-document.createTextNode(text.slice(start))
-);
-
+fragment.appendChild(document.createTextNode(safeText.slice(start)));
 return fragment;
-}
+},
 
-// =====================================
-// RENDER SEARCH RESULTS
-// =====================================
-function renderResults(results, query) {
-selectedIndex = -1;
-resultsList.innerHTML = "";
+renderResults(results, query) {
+this.selectedIndex = -1;
+this.resultsList.innerHTML = "";
 
-if (!results.length) {
-resultsList.innerHTML = `<li class="movie-item">No movies found.</li>`;
+if (!Array.isArray(results) || results.length === 0) {
+this.resultsList.innerHTML = `<li class="movie-item">No movies found.</li>`;
 return;
 }
 
 const fragment = document.createDocumentFragment();
 
-results.forEach((movie) => {
-const clone = template.content.cloneNode(true);
+results.forEach((movie, index) => {
+const clone = this.template.content.cloneNode(true);
 
 const item = clone.querySelector(".movie-item");
 const thumbImg = clone.querySelector(".movie-thumb-img");
@@ -230,25 +307,40 @@ const title = clone.querySelector(".movie-name");
 const year = clone.querySelector(".year");
 const rating = clone.querySelector(".rating");
 
-const thumbURL = movie.poster_path
-? `https://image.tmdb.org/t/p/w185${movie.poster_path}`
-: null;
+if (!item || !title || !year || !rating) return;
 
-title.textContent = "";
-title.appendChild(highlightText(movie.title || "Untitled", query));
-
-year.textContent = movie.release_date
-? movie.release_date.slice(0, 4)
-: "N/A";
-
-rating.textContent = movie.vote_average
+const movieTitle = movie?.title || "Untitled";
+const releaseYear = movie?.release_date ? movie.release_date.slice(0, 4) : "N/A";
+const voteAverage =
+typeof movie?.vote_average === "number" && movie.vote_average > 0
 ? `⭐ ${movie.vote_average.toFixed(1)}`
 : "⭐ N/A";
 
-if (thumbURL) {
+const thumbURL = movie?.poster_path
+? `https://image.tmdb.org/t/p/w185${movie.poster_path}`
+: null;
+
+item.setAttribute("data-result-item", "true");
+item.setAttribute("data-index", String(index));
+item.setAttribute("role", "option");
+item.setAttribute("aria-selected", "false");
+item.setAttribute("tabindex", "-1");
+
+title.textContent = "";
+title.appendChild(this.highlightText(movieTitle, query));
+
+year.textContent = releaseYear;
+rating.textContent = voteAverage;
+
+if (thumbURL && thumbImg) {
 thumbImg.src = thumbURL;
-thumbImg.alt = `${movie.title || "Movie"} poster`;
+thumbImg.alt = `${movieTitle} poster`;
 thumbImg.classList.remove("hidden");
+
+thumbImg.onerror = () => {
+thumbImg.classList.add("hidden");
+if (thumbFallback) thumbFallback.classList.remove("hidden");
+};
 
 if (thumbFallback) {
 thumbFallback.classList.add("hidden");
@@ -256,6 +348,7 @@ thumbFallback.classList.add("hidden");
 } else {
 if (thumbImg) {
 thumbImg.classList.add("hidden");
+thumbImg.removeAttribute("src");
 }
 
 if (thumbFallback) {
@@ -264,86 +357,102 @@ thumbFallback.classList.remove("hidden");
 }
 
 item.addEventListener("click", () => {
-resultsList.querySelectorAll(".movie-item").forEach((el) => {
+this.resultsList.querySelectorAll(".movie-item").forEach((el) => {
 el.classList.remove("active");
 });
 
 item.classList.add("active");
-loadMovieDetails(movie.id);
+this.selectedIndex = index;
+this.loadMovieDetails(movie.id);
+});
+
+item.addEventListener("mouseenter", () => {
+this.selectedIndex = index;
+const liveItems = this.resultsList.querySelectorAll(".movie-item[data-result-item='true']");
+this.updateSelection(liveItems);
 });
 
 fragment.appendChild(clone);
 });
 
-resultsList.appendChild(fragment);
+this.resultsList.appendChild(fragment);
+},
+
+clearResults() {
+this.resultsList.innerHTML = "";
+this.selectedIndex = -1;
+this.currentResults = [];
+},
+
+resetDetailsPanel() {
+if (this.detailEmpty) {
+this.detailsPanel.innerHTML = "";
+this.detailsPanel.appendChild(this.detailEmpty.cloneNode(true));
+return;
 }
 
-// =====================================
-// CLEAR RESULTS
-// =====================================
-function clearResults() {
-resultsList.innerHTML = "";
-selectedIndex = -1;
+this.detailsPanel.innerHTML = `
+<h2>Movie Details</h2>
+<p>Select a movie to view details.</p>
+`;
+},
+
+async loadMovieDetails(id) {
+if (!id) return;
+
+const detailsURL = `${MOVIE_DETAILS_URL}/${id}?api_key=${TMDB_API_KEY}`;
+const creditsURL = `${MOVIE_DETAILS_URL}/${id}/credits?api_key=${TMDB_API_KEY}`;
+const videosURL = `${MOVIE_DETAILS_URL}/${id}/videos?api_key=${TMDB_API_KEY}`;
+
+try {
+this.showLoading();
+
+this.abortActiveDetailsRequest();
+this.detailsAbortController = new AbortController();
+
+const { signal } = this.detailsAbortController;
+
+this.updatePromiseStatus(0, 3);
+
+const results = await Promise.allSettled([
+fetch(detailsURL, { signal }).then((r) => {
+if (!r.ok) throw new Error("Details request failed");
+return r.json();
+}),
+fetch(creditsURL, { signal }).then((r) => {
+if (!r.ok) throw new Error("Credits request failed");
+return r.json();
+}),
+fetch(videosURL, { signal }).then((r) => {
+if (!r.ok) throw new Error("Videos request failed");
+return r.json();
+}),
+]);
+
+const resolvedCount = results.filter((result) => result.status === "fulfilled").length;
+this.updatePromiseStatus(resolvedCount, results.length);
+
+const details = results[0].status === "fulfilled" ? results[0].value : null;
+const credits = results[1].status === "fulfilled" ? results[1].value : null;
+const videos = results[2].status === "fulfilled" ? results[2].value : null;
+
+this.renderMovieDetails(details, credits, videos);
+} catch (error) {
+if (error.name === "AbortError") {
+console.log("Details request cancelled");
+return;
 }
 
-// =====================================
-// LOAD MOVIE DETAILS
-// =====================================
-async function loadMovieDetails(id) {
-  const detailsURL = `${MOVIE_DETAILS_URL}/${id}?api_key=${TMDB_API_KEY}`;
-  const creditsURL = `${MOVIE_DETAILS_URL}/${id}/credits?api_key=${TMDB_API_KEY}`;
-  const videosURL = `${MOVIE_DETAILS_URL}/${id}/videos?api_key=${TMDB_API_KEY}`;
-
-  try {
-    showLoading();
-
-    // show pending state BEFORE Promise.allSettled runs
-    updatePromiseStatus(0, 3);
-
-    const results = await Promise.allSettled([
-      fetch(detailsURL).then((r) => {
-        if (!r.ok) throw new Error("Details request failed");
-        return r.json();
-      }),
-      fetch(creditsURL).then((r) => {
-        if (!r.ok) throw new Error("Credits request failed");
-        return r.json();
-      }),
-      fetch(videosURL).then((r) => {
-        if (!r.ok) throw new Error("Videos request failed");
-        return r.json();
-      }),
-    ]);
-
-    // count how many resolved successfully
-    const resolvedCount = results.filter(
-      (result) => result.status === "fulfilled"
-    ).length;
-
-    // update AFTER Promise.allSettled finishes
-    updatePromiseStatus(resolvedCount, results.length);
-
-    const details = results[0].status === "fulfilled" ? results[0].value : null;
-    const credits = results[1].status === "fulfilled" ? results[1].value : null;
-    const videos = results[2].status === "fulfilled" ? results[2].value : null;
-
-    renderMovieDetails(details, credits, videos);
-  } catch (error) {
-    console.error("Details error:", error);
-    detailsPanel.innerHTML = `<p>Unable to load movie details.</p>`;
-
-    // if something unexpected happens outside allSettled
-    updatePromiseStatus(0, 3);
-  } finally {
-    hideLoading();
-  }
+console.error("Details error:", error);
+this.detailsPanel.innerHTML = `<p>Unable to load movie details.</p>`;
+this.updatePromiseStatus(0, 3);
+} finally {
+this.hideLoading();
 }
+},
 
-// =====================================
-// GET TRAILER
-// =====================================
-function getTrailer(videos) {
-if (!videos || !videos.results) return null;
+getTrailer(videos) {
+if (!videos || !Array.isArray(videos.results)) return null;
 
 const trailer = videos.results.find(
 (video) =>
@@ -352,14 +461,67 @@ video.site === "YouTube" &&
 );
 
 return trailer ? `https://www.youtube.com/watch?v=${trailer.key}` : null;
+},
+
+createGenreTags(genres) {
+const wrapper = document.createElement("div");
+wrapper.className = "genre-tags";
+
+if (Array.isArray(genres) && genres.length > 0) {
+genres.forEach((genre) => {
+const tag = document.createElement("span");
+tag.className = "genre-tag";
+tag.textContent = genre?.name || "N/A";
+wrapper.appendChild(tag);
+});
+} else {
+const tag = document.createElement("span");
+tag.className = "genre-tag";
+tag.textContent = "N/A";
+wrapper.appendChild(tag);
 }
 
-// =====================================
-// RENDER MOVIE DETAILS
-// =====================================
-function renderMovieDetails(details, credits, videos) {
+return wrapper;
+},
+
+createCastList(credits) {
+const castList = document.createElement("div");
+castList.className = "cast-list";
+
+if (credits && Array.isArray(credits.cast) && credits.cast.length > 0) {
+credits.cast.slice(0, 5).forEach((actor) => {
+const member = document.createElement("div");
+member.className = "cast-member";
+
+const avatar = document.createElement("div");
+avatar.className = "cast-avatar";
+avatar.textContent = (actor?.name || "?").charAt(0);
+
+const name = document.createElement("div");
+name.className = "cast-name";
+name.textContent = actor?.name || "Unknown";
+
+const role = document.createElement("div");
+role.className = "cast-role";
+role.textContent = actor?.character || "Unknown Role";
+
+member.appendChild(avatar);
+member.appendChild(name);
+member.appendChild(role);
+castList.appendChild(member);
+});
+} else {
+const noCast = document.createElement("p");
+noCast.textContent = "No cast data available.";
+castList.appendChild(noCast);
+}
+
+return castList;
+},
+
+renderMovieDetails(details, credits, videos) {
 if (!details) {
-detailsPanel.textContent = "Unable to load movie.";
+this.detailsPanel.textContent = "Unable to load movie.";
 return;
 }
 
@@ -371,67 +533,135 @@ const backdrop = details.backdrop_path
 ? `https://image.tmdb.org/t/p/original${details.backdrop_path}`
 : "https://via.placeholder.com/1200x500?text=No+Backdrop";
 
-const genresHTML = details.genres && details.genres.length
-? details.genres.map((g) => `<span class="genre-tag">${g.name}</span>`).join("")
-: `<span class="genre-tag">N/A</span>`;
+const trailer = this.getTrailer(videos);
 
-const castHTML = credits && credits.cast && credits.cast.length
-? credits.cast.slice(0, 5).map((actor) => `
-<div class="cast-member">
-<div class="cast-avatar">${actor.name.charAt(0)}</div>
-<div class="cast-name">${actor.name}</div>
-<div class="cast-role">${actor.character || "Unknown Role"}</div>
-</div>
-`).join("")
-: `<p>No cast data available.</p>`;
+this.detailsPanel.innerHTML = "";
 
-const trailer = getTrailer(videos);
+const hero = document.createElement("div");
+hero.className = "movie-hero";
 
-detailsPanel.innerHTML = `
-<div class="movie-hero">
-<img class="movie-backdrop" src="${backdrop}" alt="${details.title} backdrop">
-<div class="movie-hero-overlay"></div>
+const backdropImg = document.createElement("img");
+backdropImg.className = "movie-backdrop";
+backdropImg.src = backdrop;
+backdropImg.alt = `${details.title || "Movie"} backdrop`;
 
-<div class="movie-hero-content">
-<img class="movie-poster" src="${poster}" alt="${details.title} poster">
+const overlay = document.createElement("div");
+overlay.className = "movie-hero-overlay";
 
-<div class="movie-main-info">
-<h1 class="movie-title">${details.title}</h1>
-<p class="movie-tagline">${details.tagline || "No tagline available."}</p>
+const heroContent = document.createElement("div");
+heroContent.className = "movie-hero-content";
 
-<div class="genre-tags">
-${genresHTML}
-</div>
-</div>
-</div>
-</div>
+const posterImg = document.createElement("img");
+posterImg.className = "movie-poster";
+posterImg.src = poster;
+posterImg.alt = `${details.title || "Movie"} poster`;
 
-<div class="info-card">
-<h3>Overview</h3>
-<p>${details.overview || "No overview available."}</p>
-</div>
+const mainInfo = document.createElement("div");
+mainInfo.className = "movie-main-info";
 
-<div class="movie-bottom-grid">
-<div class="info-card">
-<h3>Cast</h3>
-<div class="cast-list">
-${castHTML}
-</div>
-</div>
+const title = document.createElement("h1");
+title.className = "movie-title";
+title.textContent = details.title || "Untitled";
 
-<div class="info-card">
-<h3>Movie Info</h3>
-<p><strong>Release:</strong> ${details.release_date || "N/A"}</p>
-<p><strong>Rating:</strong> ⭐ ${details.vote_average ? details.vote_average.toFixed(1) : "N/A"}</p>
-<p><strong>Runtime:</strong> ${details.runtime ? `${details.runtime} mins` : "N/A"}</p>
-<p><strong>Language:</strong> ${details.original_language ? details.original_language.toUpperCase() : "N/A"}</p>
-<br>
-${
-trailer
-? `<a href="${trailer}" target="_blank" class="trailer-btn">▶ Watch Trailer</a>`
-: `<p>No trailer available.</p>`
+const tagline = document.createElement("p");
+tagline.className = "movie-tagline";
+tagline.textContent = details.tagline || "No tagline available.";
+
+const genreTags = this.createGenreTags(details.genres);
+
+mainInfo.appendChild(title);
+mainInfo.appendChild(tagline);
+mainInfo.appendChild(genreTags);
+
+heroContent.appendChild(posterImg);
+heroContent.appendChild(mainInfo);
+
+hero.appendChild(backdropImg);
+hero.appendChild(overlay);
+hero.appendChild(heroContent);
+
+const overviewCard = document.createElement("div");
+overviewCard.className = "info-card";
+
+const overviewHeading = document.createElement("h3");
+overviewHeading.textContent = "Overview";
+
+const overviewText = document.createElement("p");
+overviewText.textContent = details.overview || "No overview available.";
+
+overviewCard.appendChild(overviewHeading);
+overviewCard.appendChild(overviewText);
+
+const bottomGrid = document.createElement("div");
+bottomGrid.className = "movie-bottom-grid";
+
+const castCard = document.createElement("div");
+castCard.className = "info-card";
+
+const castHeading = document.createElement("h3");
+castHeading.textContent = "Cast";
+
+const castList = this.createCastList(credits);
+
+castCard.appendChild(castHeading);
+castCard.appendChild(castList);
+
+const infoCard = document.createElement("div");
+infoCard.className = "info-card";
+
+const infoHeading = document.createElement("h3");
+infoHeading.textContent = "Movie Info";
+
+const release = document.createElement("p");
+release.innerHTML = `<strong>Release:</strong> ${details.release_date || "N/A"}`;
+
+const rating = document.createElement("p");
+rating.innerHTML = `<strong>Rating:</strong> ⭐ ${
+typeof details.vote_average === "number" && details.vote_average > 0
+? details.vote_average.toFixed(1)
+: "N/A"
+}`;
+
+const runtime = document.createElement("p");
+runtime.innerHTML = `<strong>Runtime:</strong> ${
+details.runtime ? `${details.runtime} mins` : "N/A"
+}`;
+
+const language = document.createElement("p");
+language.innerHTML = `<strong>Language:</strong> ${
+details.original_language ? details.original_language.toUpperCase() : "N/A"
+}`;
+
+infoCard.appendChild(infoHeading);
+infoCard.appendChild(release);
+infoCard.appendChild(rating);
+infoCard.appendChild(runtime);
+infoCard.appendChild(language);
+infoCard.appendChild(document.createElement("br"));
+
+if (trailer) {
+const trailerLink = document.createElement("a");
+trailerLink.href = trailer;
+trailerLink.target = "_blank";
+trailerLink.rel = "noopener noreferrer";
+trailerLink.className = "trailer-btn";
+trailerLink.textContent = "▶ Watch Trailer";
+infoCard.appendChild(trailerLink);
+} else {
+const noTrailer = document.createElement("p");
+noTrailer.textContent = "No trailer available.";
+infoCard.appendChild(noTrailer);
 }
-</div>
-</div>
-`;
+
+bottomGrid.appendChild(castCard);
+bottomGrid.appendChild(infoCard);
+
+this.detailsPanel.appendChild(hero);
+this.detailsPanel.appendChild(overviewCard);
+this.detailsPanel.appendChild(bottomGrid);
 }
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+SearchComponent.init();
+});
