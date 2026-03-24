@@ -1,57 +1,74 @@
-//These store references to HTML elements for reusability
-let searchInput = null;
-let resultsList = null;
-let template = null;
-let detailsPanel = null;
-let spinner = null;
-let searchStatus = null;
-let detailEmpty = null;
+document.addEventListener("DOMContentLoaded", () => {
+const MovieSearchApp = {
+elements: {
+searchInput: null,
+resultsList: null,
+template: null,
+detailsPanel: null,
+spinner: null,
+searchStatus: null,
+detailEmpty: null,
+appContainer: null,
+},
 
-let cache = new Map();
-let abortController = null;
-let detailsAbortController = null;
-let selectedIndex = -1;
-let currentResults = [];
+state: {
+cache: new Map(),
+abortController: null,
+detailsAbortController: null,
+selectedIndex: -1,
+currentResults: [],
+lastQuery: "",
+},
 
-let lastQuery = "";
-//Grabs all required DOM elements & check if they exist
-function init() {
-searchInput = document.getElementById("searchInput");
-resultsList = document.getElementById("resultsList");
-template = document.getElementById("movieItemTemplate");
-detailsPanel = document.getElementById("movieDetails");
-spinner = document.getElementById("loadingSpinner");
-searchStatus = document.getElementById("searchStatus");
-detailEmpty = document.getElementById("detail-empty");
+
+init() {
+this.elements.searchInput = document.getElementById("searchInput");
+this.elements.resultsList = document.getElementById("resultsList");
+this.elements.template = document.getElementById("movieItemTemplate");
+this.elements.detailsPanel = document.getElementById("movieDetails");
+this.elements.spinner = document.getElementById("loadingSpinner");
+this.elements.searchStatus = document.getElementById("searchStatus");
+this.elements.detailEmpty = document.getElementById("detail-empty");
+this.elements.appContainer = document.querySelector(".app-shell");
+
+const {
+searchInput,
+resultsList,
+template,
+detailsPanel,
+} = this.elements;
 
 if (!searchInput || !resultsList || !template || !detailsPanel) {
 console.error("Missing required DOM elements.");
 return;
 }
 
-bindEvents();
-setSearchStatus("Ready");
-}
+this.bindEvents();
+this.setSearchStatus("Ready");
+this.resetDetailsPanel();
+},
 
-//attaches two key listeners to the search input
-function bindEvents() {
-searchInput.addEventListener(//triggers search with debounce
+
+bindEvents() {
+const { searchInput } = this.elements;
+
+searchInput.addEventListener(
 "input",
-debounce((e) => {
-handleInput(e.target.value);
+this.debounce((e) => {
+this.handleInput(e.target.value);
 }, 300)
 );
-//handles keyboard navigation
+
 searchInput.addEventListener("keydown", (e) => {
 if (["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(e.key)) {
 e.preventDefault();
 }
 
-handleKeyboard(e);
+this.handleKeyboard(e);
 });
-}
+},
 
-function debounce(fn, delay = 300) {//ensures 300 delay debounce
+debounce(fn, delay = 300) {
 let timer = null;
 
 return (...args) => {
@@ -60,95 +77,108 @@ timer = setTimeout(() => {
 fn(...args);
 }, delay);
 };
-}
+},
 
 
-function showLoading() {
+showLoading() {
+const { spinner, searchInput, appContainer } = this.elements;
+
 if (spinner) {
 spinner.classList.remove("hidden");
 }
 
 if (searchInput) {
-searchInput.setAttribute("data-loading", "true");
+if (appContainer) {
+appContainer.setAttribute("data-loading", "true");
+}
 searchInput.setAttribute("aria-busy", "true");
 }
-}
+},
 
-function hideLoading() {
+hideLoading() {
+const { spinner, searchInput, appContainer } = this.elements;
+
 if (spinner) {
 spinner.classList.add("hidden");
 }
 
 if (searchInput) {
-searchInput.setAttribute("data-loading", "false");
+if (appContainer) {
+appContainer.setAttribute("data-loading", "false");
+}
 searchInput.setAttribute("aria-busy", "false");
 }
-}
+},
 
-function setSearchStatus(message) {
+setSearchStatus(message) {
+const { searchStatus } = this.elements;
 if (!searchStatus) return;
 searchStatus.textContent = message;
-}
+},
 
-function updatePromiseStatus(resolved, total) {
+updatePromiseStatus(resolved, total) {
+const { searchStatus } = this.elements;
 if (!searchStatus) return;
 searchStatus.textContent = `Promise.allSettled · ${resolved}/${total} resolved`;
-}
+},
 
-function createTextNodeSafe(value, fallback = "") {
+createTextNodeSafe(value, fallback = "") {
 return document.createTextNode(value || fallback);
-}
+},
 
 
-function handleInput(query) {
+handleInput(query) {
 const trimmed = query.trim();
-lastQuery = trimmed;
+this.state.lastQuery = trimmed;
 
 if (trimmed.length === 0) {
-abortActiveSearch();
-clearResults();
-resetDetailsPanel();
-setSearchStatus("Ready");
+this.abortActiveSearch();
+this.clearResults();
+this.resetDetailsPanel();
+this.setSearchStatus("Ready");
 return;
 }
 
-searchMovies(trimmed);
-}
+this.searchMovies(trimmed);
+},
 
-function abortActiveSearch() {
-if (abortController) {
-abortController.abort();
+abortActiveSearch() {
+if (this.state.abortController) {
+this.state.abortController.abort();
 }
-}
+},
 
-function abortActiveDetailsRequest() {
-if (detailsAbortController) {
-detailsAbortController.abort();
+abortActiveDetailsRequest() {
+if (this.state.detailsAbortController) {
+this.state.detailsAbortController.abort();
 }
-}
+},
 
-async function searchMovies(query) {
+async searchMovies(query) {
+const { resultsList } = this.elements;
+const { cache } = this.state;
+
 if (cache.has(query)) {
 const cachedResults = cache.get(query);
-currentResults = cachedResults;
-renderResults(cachedResults, query);
-setSearchStatus(
+this.state.currentResults = cachedResults;
+this.renderResults(cachedResults, query);
+this.setSearchStatus(
 `Cache hit · ${cachedResults.length} result${cachedResults.length === 1 ? "" : "s"}`
 );
 return;
 }
 
 try {
-showLoading();
-setSearchStatus("Searching...");
+this.showLoading();
+this.setSearchStatus("Searching...");
 
-abortActiveSearch();
-abortController = new AbortController();
+this.abortActiveSearch();
+this.state.abortController = new AbortController();
 
 const url = `${SEARCH_URL}?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}`;
 
 const response = await fetch(url, {
-signal: abortController.signal,
+signal: this.state.abortController.signal,
 });
 
 if (!response.ok) {
@@ -159,14 +189,16 @@ const data = await response.json();
 const results = Array.isArray(data.results) ? data.results : [];
 
 cache.set(query, results);
-currentResults = results;
+this.state.currentResults = results;
 
-if (lastQuery !== query) {
+if (this.state.lastQuery !== query) {
 return;
 }
 
-renderResults(results, query);
-setSearchStatus(`Loaded · ${results.length} result${results.length === 1 ? "" : "s"}`);
+this.renderResults(results, query);
+this.setSearchStatus(
+`Loaded · ${results.length} result${results.length === 1 ? "" : "s"}`
+);
 } catch (error) {
 if (error.name === "AbortError") {
 console.log("Search request cancelled");
@@ -174,73 +206,76 @@ return;
 }
 
 console.error("Search error:", error);
+if (resultsList) {
 resultsList.innerHTML = `<li class="movie-item">Unable to load search results.</li>`;
-setSearchStatus("Search failed");
+}
+this.setSearchStatus("Search failed");
 } finally {
-hideLoading();
+this.hideLoading();
 }
-}
+},
 
-function handleKeyboard(event) {
+handleKeyboard(event) {
+const { resultsList, searchInput } = this.elements;
 const items = resultsList.querySelectorAll(".movie-item[data-result-item='true']");
 if (items.length === 0) return;
 
 if (event.key === "ArrowDown") {
 event.preventDefault();
 
-if (selectedIndex < 0) {
-selectedIndex = 0;
+if (this.state.selectedIndex < 0) {
+this.state.selectedIndex = 0;
 } else {
-selectedIndex++;
-if (selectedIndex >= items.length) {
-selectedIndex = 0;
+this.state.selectedIndex++;
+if (this.state.selectedIndex >= items.length) {
+this.state.selectedIndex = 0;
 }
 }
 
-updateSelection(items);
+this.updateSelection(items);
 return;
 }
 
 if (event.key === "ArrowUp") {
 event.preventDefault();
 
-if (selectedIndex < 0) {
-selectedIndex = items.length - 1;
+if (this.state.selectedIndex < 0) {
+this.state.selectedIndex = items.length - 1;
 } else {
-selectedIndex--;
-if (selectedIndex < 0) {
-selectedIndex = items.length - 1;
+this.state.selectedIndex--;
+if (this.state.selectedIndex < 0) {
+this.state.selectedIndex = items.length - 1;
 }
 }
 
-updateSelection(items);
+this.updateSelection(items);
 return;
 }
 
 if (event.key === "Enter") {
-if (selectedIndex >= 0 && items[selectedIndex]) {
+if (this.state.selectedIndex >= 0 && items[this.state.selectedIndex]) {
 event.preventDefault();
-items[selectedIndex].click();
+items[this.state.selectedIndex].click();
 }
 return;
 }
 
 if (event.key === "Escape") {
 event.preventDefault();
-clearSelection(items);
+this.clearSelection(items);
 searchInput.focus();
 }
-}
+},
 
-function updateSelection(items) {
+updateSelection(items) {
 items.forEach((item) => {
 item.classList.remove("selected");
 item.setAttribute("aria-selected", "false");
 item.setAttribute("tabindex", "-1");
 });
 
-if (selectedIndex >= 0 && items[selectedIndex]) {
-const activeItem = items[selectedIndex];
+if (this.state.selectedIndex >= 0 && items[this.state.selectedIndex]) {
+const activeItem = items[this.state.selectedIndex];
 activeItem.classList.add("selected");
 activeItem.setAttribute("aria-selected", "true");
 activeItem.setAttribute("tabindex", "0");
@@ -249,20 +284,19 @@ activeItem.scrollIntoView({
 block: "nearest",
 });
 }
-}
+},
 
-function clearSelection(items) {
-selectedIndex = -1;
+clearSelection(items) {
+this.state.selectedIndex = -1;
 
 items.forEach((item) => {
 item.classList.remove("selected");
 item.setAttribute("aria-selected", "false");
 item.setAttribute("tabindex", "-1");
 });
-}
+},
 
-
-function highlightText(text, query) {
+highlightText(text, query) {
 const fragment = document.createDocumentFragment();
 
 const safeText = String(text || "Untitled");
@@ -292,10 +326,12 @@ start = index + safeQuery.length;
 
 fragment.appendChild(document.createTextNode(safeText.slice(start)));
 return fragment;
-}
+},
 
-function renderResults(results, query) {
-selectedIndex = -1;
+renderResults(results, query) {
+const { resultsList, template } = this.elements;
+
+this.state.selectedIndex = -1;
 resultsList.innerHTML = "";
 
 if (!Array.isArray(results) || results.length === 0) {
@@ -335,7 +371,7 @@ item.setAttribute("aria-selected", "false");
 item.setAttribute("tabindex", "-1");
 
 title.textContent = "";
-title.appendChild(highlightText(movieTitle, query));
+title.appendChild(this.highlightText(movieTitle, query));
 
 year.textContent = releaseYear;
 rating.textContent = voteAverage;
@@ -370,30 +406,32 @@ el.classList.remove("active");
 });
 
 item.classList.add("active");
-selectedIndex = index;
-loadMovieDetails(movie.id);
+this.state.selectedIndex = index;
+this.loadMovieDetails(movie.id);
 });
 
 item.addEventListener("mouseenter", () => {
-selectedIndex = index;
+this.state.selectedIndex = index;
 const liveItems = resultsList.querySelectorAll(".movie-item[data-result-item='true']");
-updateSelection(liveItems);
+this.updateSelection(liveItems);
 });
 
 fragment.appendChild(clone);
 });
 
 resultsList.appendChild(fragment);
-}
+},
 
-
-function clearResults() {
+clearResults() {
+const { resultsList } = this.elements;
 resultsList.innerHTML = "";
-selectedIndex = -1;
-currentResults = [];
-}
+this.state.selectedIndex = -1;
+this.state.currentResults = [];
+},
 
-function resetDetailsPanel() {
+resetDetailsPanel() {
+const { detailEmpty, detailsPanel } = this.elements;
+
 if (detailEmpty) {
 detailsPanel.innerHTML = "";
 detailsPanel.appendChild(detailEmpty.cloneNode(true));
@@ -404,9 +442,10 @@ detailsPanel.innerHTML = `
 <h2>Movie Details</h2>
 <p>Select a movie to view details.</p>
 `;
-}
+},
 
-async function loadMovieDetails(id) {
+async loadMovieDetails(id) {
+const { detailsPanel } = this.elements;
 if (!id) return;
 
 const detailsURL = `${MOVIE_DETAILS_URL}/${id}?api_key=${TMDB_API_KEY}`;
@@ -414,14 +453,14 @@ const creditsURL = `${MOVIE_DETAILS_URL}/${id}/credits?api_key=${TMDB_API_KEY}`;
 const videosURL = `${MOVIE_DETAILS_URL}/${id}/videos?api_key=${TMDB_API_KEY}`;
 
 try {
-showLoading();
+this.showLoading();
 
-abortActiveDetailsRequest();
-detailsAbortController = new AbortController();
+this.abortActiveDetailsRequest();
+this.state.detailsAbortController = new AbortController();
 
-const { signal } = detailsAbortController;
+const { signal } = this.state.detailsAbortController;
 
-updatePromiseStatus(0, 3);
+this.updatePromiseStatus(0, 3);
 
 const results = await Promise.allSettled([
 fetch(detailsURL, { signal }).then((r) => {
@@ -439,13 +478,13 @@ return r.json();
 ]);
 
 const resolvedCount = results.filter((result) => result.status === "fulfilled").length;
-updatePromiseStatus(resolvedCount, results.length);
+this.updatePromiseStatus(resolvedCount, results.length);
 
 const details = results[0].status === "fulfilled" ? results[0].value : null;
 const credits = results[1].status === "fulfilled" ? results[1].value : null;
 const videos = results[2].status === "fulfilled" ? results[2].value : null;
 
-renderMovieDetails(details, credits, videos);
+this.renderMovieDetails(details, credits, videos);
 } catch (error) {
 if (error.name === "AbortError") {
 console.log("Details request cancelled");
@@ -454,13 +493,13 @@ return;
 
 console.error("Details error:", error);
 detailsPanel.innerHTML = `<p>Unable to load movie details.</p>`;
-updatePromiseStatus(0, 3);
+this.updatePromiseStatus(0, 3);
 } finally {
-hideLoading();
+this.hideLoading();
 }
-}
+},
 
-function getTrailer(videos) {
+getTrailer(videos) {
 if (!videos || !Array.isArray(videos.results)) return null;
 
 const trailer = videos.results.find(
@@ -470,9 +509,9 @@ video.site === "YouTube" &&
 );
 
 return trailer ? `https://www.youtube.com/watch?v=${trailer.key}` : null;
-}
+},
 
-function createGenreTags(genres) {
+createGenreTags(genres) {
 const wrapper = document.createElement("div");
 wrapper.className = "genre-tags";
 
@@ -491,9 +530,9 @@ wrapper.appendChild(tag);
 }
 
 return wrapper;
-}
+},
 
-function createCastList(credits) {
+createCastList(credits) {
 const castList = document.createElement("div");
 castList.className = "cast-list";
 
@@ -526,9 +565,11 @@ castList.appendChild(noCast);
 }
 
 return castList;
-}
+},
 
-function renderMovieDetails(details, credits, videos) {
+renderMovieDetails(details, credits, videos) {
+const { detailsPanel } = this.elements;
+
 if (!details) {
 detailsPanel.textContent = "Unable to load movie.";
 return;
@@ -542,7 +583,7 @@ const backdrop = details.backdrop_path
 ? `https://image.tmdb.org/t/p/original${details.backdrop_path}`
 : "https://via.placeholder.com/1200x500?text=No+Backdrop";
 
-const trailer = getTrailer(videos);
+const trailer = this.getTrailer(videos);
 
 detailsPanel.innerHTML = "";
 
@@ -576,7 +617,7 @@ const tagline = document.createElement("p");
 tagline.className = "movie-tagline";
 tagline.textContent = details.tagline || "No tagline available.";
 
-const genreTags = createGenreTags(details.genres);
+const genreTags = this.createGenreTags(details.genres);
 
 mainInfo.appendChild(title);
 mainInfo.appendChild(tagline);
@@ -610,7 +651,7 @@ castCard.className = "info-card";
 const castHeading = document.createElement("h3");
 castHeading.textContent = "Cast";
 
-const castList = createCastList(credits);
+const castList = this.createCastList(credits);
 
 castCard.appendChild(castHeading);
 castCard.appendChild(castList);
@@ -668,10 +709,8 @@ bottomGrid.appendChild(infoCard);
 detailsPanel.appendChild(hero);
 detailsPanel.appendChild(overviewCard);
 detailsPanel.appendChild(bottomGrid);
-}
+},
+};
 
-document.addEventListener("DOMContentLoaded", () => {
-init();
+MovieSearchApp.init();
 });
-
-
